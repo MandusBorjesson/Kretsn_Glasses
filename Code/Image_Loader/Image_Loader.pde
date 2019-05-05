@@ -6,7 +6,7 @@ int DESC_MEM_BASE = 0x1080; // Configuration data address
 
 PFont font;
 int port;
-int baud = 1200;
+int baud = 9600;
 String[] allPorts;
 String[] commands;
 int nDescriptors = 8;
@@ -25,13 +25,14 @@ int str2mode(String str) {
 
 public class Setting {
   public String name, type;
-  public int period, offset, frames, mode;
+  public int period, offset, size, mode, eyes;
 
   Setting(String name) {
     this.name = name;
     this.type = "FRAME";
-    this.mode = 0;
+    this.mode = 1;
     this.period = 1000;
+    this.eyes = 0;
   }
 
   Setting(String name, String type, int period) {
@@ -46,7 +47,8 @@ public class Setting {
     println("Type:   " + this.type);
     println("Period: " + str(this.period));
     println("Offset: " + hex(this.offset));
-    println("Frames: " + str(this.frames));
+    println("Size:   " + str(this.size));
+    println("Eyes:   " + hex(this.eyes));
   }
 }
 
@@ -58,7 +60,7 @@ byte[] data = new byte[0];
 byte[] binaryGlassData = new byte[IMG_MEM_SIZE];
 
 void setup() {
-  size(1200, 800);
+  size(800, 200);
   port = 0;  
 
   if (Serial.list().length > 0) {
@@ -147,6 +149,15 @@ void folderSelected(File selection) {
         {
           String[] temp = split(split(file, ".")[0], "_");
           Setting setting = new Setting(file, temp[1], abs(int(temp[2])));
+          setting.eyes = 0x00;
+          if(temp.length == 4){
+            setting.eyes = ((temp[3].indexOf("R")==-1)? 0:1) + ((temp[3].indexOf("G")==-1)? 0:2) + ((temp[3].indexOf("B")==-1)? 0:4);
+            setting.eyes += setting.eyes << 4;
+          } else if (temp.length == 5){
+            setting.eyes = ((temp[3].indexOf("R")==-1)? 0:1) + ((temp[3].indexOf("G")==-1)? 0:2) + ((temp[3].indexOf("B")==-1)? 0:4);
+            setting.eyes <<= 4;
+            setting.eyes += ((temp[4].indexOf("R")==-1)? 0:1) + ((temp[4].indexOf("G")==-1)? 0:2) + ((temp[4].indexOf("B")==-1)? 0:4);          
+          }
           settings[settingcounter++] = setting;
           break;
         }
@@ -155,17 +166,17 @@ void folderSelected(File selection) {
 
     // Make image data for glasses from images
     offset = 0;
-    for (Setting a : settings) {
+    for (int a = 0; a < settingcounter; a++) {
       println("======================");
-      byte[] data = processimage(selection.getAbsolutePath() + "\\" + a.name);
+      byte[] data = processimage(selection.getAbsolutePath() + "/" + settings[a].name);
 
-      a.offset = offset;
-      a.frames = floor(data.length/16);
+      settings[a].offset = offset;
+      settings[a].size = data.length;
 
       arrayCopy(data, 0, binaryGlassData, offset, data.length);
       offset += data.length;
 
-      a.display();
+      settings[a].display();
     }
     println("Total consumed area: " + offset + " bytes, " + str(100*offset/IMG_MEM_SIZE) + "%");
     if (offset > IMG_MEM_SIZE) {
@@ -178,7 +189,7 @@ byte[] processimage(String path) {
   PImage img = loadImage(path);
   img.loadPixels();
   int w = img.width;
-  int h = img.height - img.height%8; // Remove any pixels that dont add up to an even frame number
+  int h = img.height;
   int[] temp = new int[w];
   byte[] data = new byte[h*2];
 
@@ -207,7 +218,6 @@ byte[] processimage(String path) {
 
 void writeToGlasses(byte[] data) {
   int theBaud = baud;
-  println(data.length);
   String thePort = allPorts[port];
 
   if (thePort.equals("NO AVAILABLE PORTS.")) {
@@ -217,7 +227,6 @@ void writeToGlasses(byte[] data) {
 
   myPort = new Serial(this, thePort, theBaud);
 
-  byte[] writeCmd = {'w', 'r'};
   int base = IMG_MEM_BASE;
   byte[] chunked = new byte[64];
 
@@ -225,7 +234,7 @@ void writeToGlasses(byte[] data) {
   print("Clearing flash memory...");
 
   myPort.write("cl"); // Clear Images
-  delay(100);
+  delay(400);
   println("Done");
 
   for (int i = 0; i < offset; i+=64) {
@@ -237,14 +246,14 @@ void writeToGlasses(byte[] data) {
     byte[] CMD = {'w', 'r', addrMSB, addrLSB, (byte)chunked.length, 0x01};
 
     myPort.write(concat(CMD, chunked));
-    delay(100);
+    delay(400);
     println("Done");
   }
 
   print("Clearing descriptor memory...");
 
   myPort.write("de"); // Clear descriptors
-  delay(100);
+  delay(400);
   println("Done");
 
   for (int i = 0; i < chunked.length; i++) {
@@ -253,15 +262,15 @@ void writeToGlasses(byte[] data) {
   
   for (int i = 0; i < settingcounter; i++) {
     Setting s = settings[i];
-    byte[] desc = new byte[6];
-    desc[0] = (byte)(s.offset>>8);
-    desc[1] = (byte)(s.offset&0xFF);
-    desc[2] = (byte)(s.frames>>8);
-    desc[3] = (byte)(s.frames&0xFF);
+    byte[] desc = new byte[8];
+    desc[0] = (byte)(s.offset&0xFF);
+    desc[1] = (byte)(s.offset>>8);
+    desc[2] = (byte)(s.size&0xFF);
+    desc[3] = (byte)(s.size>>8);
     desc[4] = (byte)(floor(s.period/100)&0xFF); 
     desc[5] = (byte)(s.mode&0xFF);
-    println(hex(desc[5]));
-
+    desc[6] = (byte)(s.eyes);
+    desc[7] = 0;
     arrayCopy(desc, 0, chunked, i*desc.length, desc.length);
   }
 
@@ -271,8 +280,15 @@ void writeToGlasses(byte[] data) {
 
   byte[] CMD = {'w', 'r', addrMSB, addrLSB, (byte)chunked.length, 0x01};
   myPort.write(concat(CMD, chunked));
-  delay(100);
+  delay(400);
   println("Done");
+  
+  println(hex(CMD[2]) + " " + hex(CMD[3]));
+  for(int i = 0; i < chunked.length; i++){
+    print(hex(chunked[i]) + ", ");
+    if((i+1)%8 == 0)
+      println();
+  }
 
   myPort.stop();
 }

@@ -23,12 +23,27 @@
 #define DESC_MEM_BASE (unsigned int)0x1080 // Configuration data address
 #define DESC_MEM_SIZE (unsigned int)0x0040 // Configuration data size
 
-#define N_DESCRIPTORS 8 // Number of images allowed to be loaded from flash
+#define MAX_DESCRIPTORS 8 // Number of images allowed to be loaded from flash
+unsigned char n_descriptors = 0;
+
+unsigned char Flash_Count_Descriptors(void)
+{
+    char *p = (char*)DESC_MEM_BASE;                          // Flash pointer
+    int i;
+    for(i= 0; i < MAX_DESCRIPTORS; i++){
+        if(p[5] == 0xFF){
+            return i;
+        }
+        p += DESC_SIZE;
+    }
+    return MAX_DESCRIPTORS;
+}
+
 
 void Flash_Erase_Descriptors(void)
 {
-    char *Flash_ptr;                          // Flash pointer
-    Flash_ptr = (char *) DESC_MEM_BASE;        // Initialize Flash pointer
+    char *Flash_ptr = (char*)DESC_MEM_BASE;                          // Flash pointer
+//    Flash_ptr = ;        // Initialize Flash pointer
 
     FCTL1 = FWKEY + ERASE;                    // Set Erase bit
     FCTL3 = FWKEY;                            // Clear Lock bit
@@ -41,17 +56,16 @@ void Flash_Erase_Descriptors(void)
 char Flash_Load_Descriptor(struct imageDescriptor *descriptor,
                            unsigned char index)
 {
-    if (index >= N_DESCRIPTORS)
+    if (index >= n_descriptors)
         return -1;
 
-    unsigned int* p = (DESC_MEM_BASE + (sizeof(struct imageDescriptor)) * index);
+    unsigned char* p = (DESC_MEM_BASE + DESC_SIZE * index);
 
-    descriptor->offset = *p;
-    descriptor->frames = *(p+2);
-    descriptor->period = *(p+4);
-    descriptor->mode = *(p+5);
-    //memcpy((void*)descriptor, (void*)(DESC_MEM_BASE + (sizeof(struct imageDescriptor)) * index), sizeof(struct imageDescriptor) );
-    //descriptor = (struct imageDescriptor*) (DESC_MEM_BASE + (sizeof(struct imageDescriptor)) * index);
+    descriptor->offset = p[0]+(p[1] << 8);
+    descriptor->size   = p[2]+(p[3] << 8);
+    descriptor->period = p[4];
+    descriptor->mode   = p[5];
+    descriptor->eyes   = p[6];
 
     if (descriptor->period == 0xFFFF)
         return -1;
@@ -61,8 +75,8 @@ char Flash_Load_Descriptor(struct imageDescriptor *descriptor,
 
 void Flash_Erase_Images(void)
 {
-    char *Flash_ptr;                          // Flash pointer
-    Flash_ptr = (char *) IMG_MEM_BASE;        // Initialize Flash pointer
+    char *Flash_ptr = (char*)IMG_MEM_BASE;                          // Flash pointer
+//    Flash_ptr = (char *) IMG_MEM_BASE;        // Initialize Flash pointer
 
     FCTL1 = FWKEY + ERASE;                    // Set Erase bit
     FCTL3 = FWKEY;                            // Clear Lock bit
@@ -98,9 +112,9 @@ void Flash_Write(unsigned int startAddr, unsigned char data[], int dataSize)
     if (!(inImgMem(startAddr, dataSize) || inDescMem(startAddr, dataSize)))
         return;
 
-    unsigned int *Flash_ptr;                          // Flash pointer
+    unsigned char *Flash_ptr;                          // Flash pointer
     unsigned int i;
-    Flash_ptr = (unsigned int *) startAddr;           // Initialize Flash pointer
+    Flash_ptr = (unsigned char *) startAddr;           // Initialize Flash pointer
 
     FCTL1 = FWKEY + WRT;                      // Set WRT bit for write operation
     FCTL3 = FWKEY;                            // Clear Lock bit

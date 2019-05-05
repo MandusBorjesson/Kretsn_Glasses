@@ -14,10 +14,13 @@
 
 struct imageDescriptor {
    unsigned int offset;     // Address offset of an image/animation in flash
-   unsigned int frames;     // Number of frames in image
+   unsigned int size;       // Size of image
    unsigned char period;    // Sensor dependency
    unsigned char mode;      // Sensor dependency
+   unsigned char eyes;
 };
+
+#define DESC_SIZE 8
 
 struct imageDescriptor img;
 
@@ -33,6 +36,8 @@ unsigned char UART_Available = 0;
 unsigned char UART_Buf[UART_BUFSIZE];
 
 /* Display related constants/variables */
+#define MODE_FRAME 1
+#define MODE_SWEEP 2
 #define NUM_SENSORS 8           //Number of sensors
 unsigned int  FRAME_CNTR = 0;   // Current frame that is displayed
 unsigned int  FRAME_OFFS = 0;   // Current frame offset

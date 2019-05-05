@@ -40,7 +40,7 @@ __interrupt void ADC10_ISR(void)
 
     if ((abs(currSample - prevSample) < BUTTON_TOLERANCE) && currSample > 15 && buttonreleased == 1)
     {
-        volatile unsigned int BTN_VAL = (currSample + prevSample) / 2; // Set button value
+        volatile unsigned int BTN_VAL = (currSample + prevSample) >> 1; // Set button value
 
         if (BTN_VAL < 120)
             STATUS_VEC |= STATUS_BTN_1;       // Set status bits

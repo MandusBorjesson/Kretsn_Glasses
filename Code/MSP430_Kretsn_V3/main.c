@@ -102,7 +102,6 @@ int main(void)
     TIMER_A0_Init();    // Initialize timer 0
     TIMER_A1_Init();    // Initialize timer 1
     WDT_Init();         // Initialize WDT
-    //GPIO_BTN_Init();
     ADC10_Init();
 
     Eyes_Init();
@@ -113,18 +112,17 @@ int main(void)
     P2OUT |= OE_MATR; // Turn off matrix
 
 
-
+    n_descriptors = Flash_Count_Descriptors();
     Flash_Load_Descriptor(&img, 0);
-    img.offset = 0x0000;
-    img.frames = 8;
-    img.period = 10;
+    Eyes_Set(img.eyes);
 
     while (1)
     {
         if ((STATUS_VEC & STATUS_BTN_1) > 0)
         {
             Status_Set(STATUS_LED_OFF);
-            volatile char succ = Flash_Load_Descriptor(&img, btnIndex);
+            Flash_Load_Descriptor(&img, btnIndex);
+            Eyes_Set(img.eyes);
             FRAME_CNTR = 0;
             FRAME_OFFS = IMG_MEM_BASE + img.offset;
             btnIndex = 0;
@@ -133,7 +131,7 @@ int main(void)
         if ((STATUS_VEC & STATUS_BTN_2) > 0)
         {
             Status_Set(1 << ((btnIndex++) & 0x01));
-            if (btnIndex >= N_DESCRIPTORS)
+            if (btnIndex >= n_descriptors)
             {
                 btnIndex = 0;
                 Status_Set(STATUS_LED_OFF);

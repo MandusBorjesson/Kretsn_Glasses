@@ -29,21 +29,35 @@ __interrupt void T1A0_ISR(void)
 {
     TA1CCR0 += 12500; // add offset, ~10Hz, 4625 ticks/s, period (seconds) = TA1CCR0/4625
 
-    FRAME_OFFS = (FRAME_CNTR << 4) + IMG_MEM_BASE + img.offset; // Calculate flash index of first element in current frame
     static int counter = 0;
     counter++;
     if (counter >= img.period)
     {
         counter = 0;
-        FRAME_CNTR++;
+
+        switch (img.mode)
+        {
+        case MODE_FRAME:
+            FRAME_CNTR += 16;
+            break;
+        case MODE_SWEEP:
+            FRAME_CNTR += 2;
+            break;
+        default:
+            FRAME_CNTR = 0;
+            break;
+        }
+
+
+        // Is there data to display?
+        if (FRAME_CNTR + 16 > img.size)
+            FRAME_CNTR = 0;
+
+        FRAME_OFFS = FRAME_CNTR + IMG_MEM_BASE + img.offset; // Calculate flash index of first element in current frame
+
     }
-
-    if (FRAME_CNTR >= img.frames)
-        FRAME_CNTR = 0;
-
     /* Start ADC sampling for the button */
-    ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion ready
-
+    ADC10CTL0 |= ENC + ADC10SC;
 }
 
 #pragma vector = TIMER1_A1_VECTOR
@@ -55,9 +69,9 @@ __interrupt void T1A1_ISR(void)
     case 2:                                 // CCR1 not used
         break;
     case 4:
-        break;                              // CCR2 not used
+        break;                                 // CCR2 not used
     case 10:
-        break;                              // overflow not used
+        break;                                 // overflow not used
     }
 }
 

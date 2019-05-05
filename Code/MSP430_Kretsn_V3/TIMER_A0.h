@@ -32,9 +32,9 @@ __interrupt void T0A0_ISR(void)
         ROW_CNTR = 0;       // Limit row to [0 7]
     }
 
-    char *p = (char*)(FRAME_OFFS + ROW_CNTR * 2);
-    SPI_TX_BUF[0] = *(p + 1); // DISP_BUF[ROW_CNTR*2 + 1 + (sensorData[CURR_SENSOR]*16)]; // Put right side in buffer
-    SPI_TX_BUF[1] = *p; // DISP_BUF[ROW_CNTR*2     + (sensorData[CURR_SENSOR]*16)]; // Put left side in buffer
+    char *p = (FRAME_OFFS + ROW_CNTR * 2);
+    SPI_TX_BUF[0] = *(p + 1); // Put right side in buffer
+    SPI_TX_BUF[1] = *p;       // Put left side in buffer
 
     SPI_BYTE_COUNTER = 0;   // Reset byte counter
     UCB0TXBUF = 0xFF;       // Send dummy Byte to initiate SPI transfer
