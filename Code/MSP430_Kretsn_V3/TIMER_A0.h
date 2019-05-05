@@ -4,7 +4,6 @@
  *  Timer A header file
  *  Functions:
  *      -- Start SPI Transmission for shift registers
- *      -- Control glasses brightness
  *
  *  Created on: 17 Jan 2018
  *      Author: Mandus
@@ -14,23 +13,11 @@
 #define TIMER_A0_H_
 
 #define TIMER0_PERIOD 625 // ~1.8kHz (SMCLK/8/F_desired)
-#define GLASSES_BRIGHTNESS 400 // Lower -> glasses brighter
-
-
-#if GLASSES_BRIGHTNESS >= TIMER0_PERIOD
-#error "Glasses will never turn on"
-#endif
-
-#if GLASSES_BRIGHTNESS < 400
-#warning "Pixels might bleed due too incomplete transfers"
-#endif
 
 void TIMER_A0_Init()
 {
     TA0CCR0 = TIMER0_PERIOD;        // Set up CCR0
-    TA0CCR1 = GLASSES_BRIGHTNESS;   // Set up CCR1
     TA0CCTL0 |= CCIE;               // TACCR0 interrupt enabled
-    TA0CCTL1 |= CCIE;               // TACCR1 interrupt enabled
 
     TA0CTL = TASSEL_2 | MC_1 | ID_0; // SMCLK, Up to CCR0, div by 8
 }
@@ -44,10 +31,11 @@ __interrupt void T0A0_ISR(void)
     {
         ROW_CNTR = 0;       // Limit row to [0 7]
     }
-    SPI_TX_BUF[0] = DISP_BUF[ROW_CNTR*2 + 1 + (sensorData[CURR_SENSOR]*16)]; // Put right side in buffer
-    SPI_TX_BUF[1] = DISP_BUF[ROW_CNTR*2     + (sensorData[CURR_SENSOR]*16)]; // Put left side in buffer
 
-//    P2OUT |= OE_MATR;       // Turn off matrix
+    char *p = (char*)(FRAME_OFFS + ROW_CNTR * 2);
+    SPI_TX_BUF[0] = *(p + 1); // DISP_BUF[ROW_CNTR*2 + 1 + (sensorData[CURR_SENSOR]*16)]; // Put right side in buffer
+    SPI_TX_BUF[1] = *p; // DISP_BUF[ROW_CNTR*2     + (sensorData[CURR_SENSOR]*16)]; // Put left side in buffer
+
     SPI_BYTE_COUNTER = 0;   // Reset byte counter
     UCB0TXBUF = 0xFF;       // Send dummy Byte to initiate SPI transfer
 
@@ -59,10 +47,7 @@ __interrupt void T0A1_ISR(void)
 {
     switch (TA0IV)
     {
-    case 2:                  // CCR1
-    {
-//        P2OUT &= ~(OE_MATR); // Turn on matrix
-    }
+    case 2:    // CCR1 not used
         break;
     case 4:
         break; // CCR2 not used

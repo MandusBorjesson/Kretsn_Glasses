@@ -61,9 +61,8 @@ MEMORY
     INFOB                   : origin = 0x1080, length = 0x0040
     INFOC                   : origin = 0x1040, length = 0x0040
     INFOD                   : origin = 0x1000, length = 0x0040
-    FLASH                   : origin = 0xC000, length = 0x3A00
-    FLASH2					: origin = 0xFA00, length = 0x0200 // Main flash used for image storage
-    FLASH3					: origin = 0xFC00, length = 0x0200 // Secondary flash used when erasing main flash
+    FLASH                   : origin = 0xC000, length = 0x2E00
+	IMGFLASH				: origin = 0xEE00, length = 0x1000 // Main flash used for image storage, 256 frames
     BSLSIGNATURE            : origin = 0xFFDE, length = 0x0002, fill = 0xFFFF
     INT00                   : origin = 0xFFE0, length = 0x0002
     INT01                   : origin = 0xFFE2, length = 0x0002
@@ -111,7 +110,7 @@ SECTIONS
     #ifndef __LARGE_CODE_MODEL__
     .TI.ramfunc : {} load=FLASH, run=RAM, table(BINIT)
     #else
-    .TI.ramfunc : {} load=FLASH | FLASH2, run=RAM, table(BINIT)
+    .TI.ramfunc : {} load=FLASH | IMGFLASH, run=RAM, table(BINIT)
     #endif
   #endif
 #endif
@@ -120,8 +119,7 @@ SECTIONS
     .infoB     : {} > INFOB
     .infoC     : {} > INFOC
     .infoD     : {} > INFOD
-    .flash2    : {} > FLASH2
-    .flash3    : {} > FLASH3
+    .flash2    : {} > IMGFLASH
 
     /* MSP430 Interrupt vectors          */
     TRAPINT      : { * ( .int00 ) } > INT00 type = VECT_INIT

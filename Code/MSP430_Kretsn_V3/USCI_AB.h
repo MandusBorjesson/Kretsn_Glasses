@@ -19,21 +19,14 @@
 #define SPIMISO BIT6
 #define SPICLK  BIT5
 #define SPI_PINS SPIMOSI | SPIMISO | SPICLK
-#define SPI_RX_NBYTE 6
-#define ACCEL_START_ADDR 0x02
-#define ACCEL_DATA_LENGTH 6
 
-#define MATRX (1<<0)
-#define ACCEL (1<<1)
 #define SPI_TX_BUF_SIZE 2
-unsigned char TX_ONGOING = MATRX;
 unsigned char SPI_BYTE_COUNTER = 0;
 unsigned char SPI_TX_BUF[SPI_TX_BUF_SIZE] = { 0 };
-unsigned char accel_rxBuf[ACCEL_DATA_LENGTH] = { 0 };
 
 #define UART_RX BIT1
 #define UART_TX BIT2
-unsigned int UART_BYTE_COUNTER = 0;
+unsigned int UART_BYTE_CNTR = 0;
 
 void USCI_A0_Init()
 {
@@ -41,11 +34,11 @@ void USCI_A0_Init()
     P1SEL2 = UART_RX | UART_TX;               // P1.1 = RXD, P1.2=TXD
 
     UCA0CTL1 |= UCSSEL_2;                     // SMCLK
-    UCA0BR0 = 0x41;                           // 10MHz 1200 Baud
-    UCA0BR1 = 0x03;                           // 10MHz 1200 Baud
+    UCA0BR0 = 104;                            // 1MHz 9600 Baud
+    UCA0BR1 = 0x00;                           // 1MHz 9600 Baud
     UCA0MCTL = UCBRS0;                        // Modulation UCBRSx = 1
-    UCA0CTL1 &= ~UCSWRST;                   // **Initialize USCI state machine**
-    IE2 |= UCA0RXIE;                        // Enable USCI_A0 RX interrupt
+    UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+    IE2 |= UCA0RXIE | UCA0TXIE;               // Enable USCI_A0 RX interrupt
 }
 
 void USCI_B0_Init()
@@ -68,70 +61,54 @@ void USCI_B0_Init()
     IE2 |= UCB0TXIE;                          // Enable RX interrupt
 }
 
+#define UART_CMD_CLR_IM    0x636C
+#define UART_CMD_CLR_DESC  0x6465
+#define UART_CMD_WRT_FLASH 0x7772
+#define UART_CMD_IDENTITY  0x6964
+
 void handleUART()
 {
-    int i;
-    if (UART_Available == 2 && (UART_Buf[0] == 0xD3)) // Single byte transmission, 'ID' mode
+    unsigned int UART_CMD = UART_Buf[0] << 8 | UART_Buf[1];
+
+    switch (UART_CMD)
     {
-        for (i = 15; i >=0; i--)
-        {
-            DISP_BUF[i] = ((UART_Buf[1] & (1 << MY_ID)) > 0) ? 0xFF: 0x00;
-        }
-        CURR_SENSOR = NUM_SENSORS-1; // Static image
-    }
-
-    if (UART_Available == 2 && (UART_Buf[0] == 0xA5
-                )) // Single byte transmission, 'BTN' mode
-        {
-            unsigned int index = (UART_Buf[1]>=N_BTN)?N_BTN-1:UART_Buf[1]; // Limit index to range [0 N_BTN]
-            CFG_DATA[index+1] = BTN_VAL;
-            BTN_VOLTS[index] = BTN_VAL;
-
-            Flash_Write_Start (CFG_MEM_ADDR);       // Start flash write, erase memory
-            Flash_Write(CFG_MEM_ADDR, CFG_MEM_SIZE, CFG_DATA); // Write to flash
-            Flash_Write_End();                      // End flash write, lock flash
-        }
-
-    if (UART_Available == 4 && UART_Buf[0] == 0xAD) // Flash store, key (0xAD) correct
+    case UART_CMD_CLR_IM:
     {
-        if((UART_Buf[3] & 0x10) != 0x00){ // If image is Static
-            DISP_BUF[16] = UART_Buf[1]; // Glass eye color
-        }
-
-        DISP_BUF[128] = UART_Buf[1]; // Glass eye color
-        DISP_BUF[129] = UART_Buf[2]; // Dependence
-        DISP_BUF[130] = UART_Buf[3]; // Index
-        Eyes_Set(DISP_BUF[128]); // Set eyes to display RED
-        FlashImages(DISP_BUF);
-
+        Flash_Erase_Images();
+        break;
     }
-
-    if (UART_Available == 4 && UART_Buf[0] == 0xF5) // Configuration ID update mode, key (0xF5) correct
+    case UART_CMD_CLR_DESC:
     {
-        CFG_DATA[0] = UART_Buf[1];
-        Flash_Write_Start (CFG_MEM_ADDR);       // Start flash write, erase memory
-        Flash_Write(CFG_MEM_ADDR, CFG_MEM_SIZE, CFG_DATA); // Write to flash
-        Flash_Write_End();                      // End flash write, lock flash
+        Flash_Erase_Descriptors();
+        break;
     }
-
-    if (UART_Available == 20)
+    case UART_CMD_WRT_FLASH:
     {
-        char index = UART_Buf[1] * 16;
-
-        for (i = 15; i >= 0; i--)
-        {
-            DISP_BUF[i + index] = UART_Buf[i + 4];
-        }
-
-        CURR_SENSOR = (UART_Buf[1] == 0)?NUM_SENSORS-1:0; // Static if first frame, otherwise animated
+        unsigned int  base   = (UART_Buf[2] << 8 | UART_Buf[3]);
+        unsigned char length = UART_Buf[4];
+//        unsigned char *p     = (unsigned char*)(UART_Buf[6]);
+        Flash_Write(base, UART_Buf, length);
+        break;
     }
-    STATUS_VEC &= ~STATUS_UART;
+    case UART_CMD_IDENTITY:
+    {
+        UART_Buf[0] = IMG_MEM_SIZE >> 8;
+        UART_Buf[1] = IMG_MEM_SIZE & 0xFF;
+        UART_Buf[2] = UART_BUFSIZE >> 8;
+        UART_Buf[3] = UART_BUFSIZE & 0xFF;
+
+        UART_BYTE_CNTR = 4;
+
+        UCA0TXBUF = 0xFF; // Kick off transmission
+        break;
+    }
+    }
 }
 
 void clearUARTbuf()
 {
-    int i;
-    for (i = UART_BUFSIZE-1; i >=0 ; i--)
+    unsigned int i;
+    for (i = UART_BUFSIZE - 1; i >= 0; i--)
     {
         UART_Buf[i] = 0;
     }
@@ -144,16 +121,11 @@ __interrupt void USCIAB0TX_ISR(void)
     if ((IFG2 & UCA0TXIFG) > 0) //UART Transmit buffer ready
     {
 
-        if (UART_BYTE_COUNTER >= NUM_SENSORS)
+        if (UART_BYTE_CNTR > 0)
         {
-            IE2 &= ~UCA0TXIE; // Done transmitting, disable TX interrupt
-        }
-        else
-        {
-            UCA0TXBUF = sensorData[UART_BYTE_COUNTER]; // Transmit sensor data
+            UCA0TXBUF = UART_Buf[--UART_BYTE_CNTR];
         }
 
-        UART_BYTE_COUNTER++;
         IFG2 &= ~UCA0TXIFG;
     }
 

@@ -83,67 +83,61 @@
 #include "FLASH.h"
 #include "ADC10.h"
 #include "USCI_AB.h"
-#include <TIMER_A0.h>
-#include <TIMER_A1.h>
+#include "GPIO.h"
+#include "TIMER_A0.h"
+#include "TIMER_A1.h"
 #include "DCO.h"
 #include "WDT.h"
+
+unsigned int testData[64] = { IMG_MEM_BASE, 32, 5 };
 
 int main(void)
 {
     WDTCTL = WDTPW + WDTHOLD;   // Stop WDT
 
-    Eyes_Init();
-    Eyes_Set(0xFF); // Eyes white
-
-    P2DIR |= CS_MATR | CS_ACCL | OE_MATR;     //Set chip selects as outputs
-    P2OUT |= OE_MATR; // Turn off matrix
-
-    unsigned long int i;
-    for (i = 0; i < 200000; i++){} // Delay loop
-
-    Flash_Read(CFG_MEM_ADDR, CFG_MEM_SIZE, CFG_DATA); // Read glasses configuration from flash
-
-    MY_ID = CFG_DATA[0];
-
-    for(i = 0; i < N_BTN; i++){
-        BTN_VOLTS[i] = CFG_DATA[i+1]; // Load button data
-    }
-
-    Eyes_Set(MY_ID | (MY_ID << 4)); // Set eyes to display ID
-    for (i = 0; i < 200000; i++){} // Delay loop
-    Eyes_Set(0x00); // Eyes off
-
-
     DCO_Calib();        // Calibrate DCO
     USCI_A0_Init();     // Initialize UART
     USCI_B0_Init();     // Initialize SPI
-    ADC10_Init();       // Initialize ADC
 
     TIMER_A0_Init();    // Initialize timer 0
     TIMER_A1_Init();    // Initialize timer 1
     WDT_Init();         // Initialize WDT
+    //GPIO_BTN_Init();
+    ADC10_Init();
 
-    P1DIR |= PIN_INDICATOR;
-    P1OUT &= ~PIN_INDICATOR;            // Turn on the red led
+    Eyes_Init();
+    Eyes_Set(0x00); // Eyes off
+    Status_Set(STATUS_LED_OFF);
+
+    P2DIR |= CS_MATR | CS_ACCL | OE_MATR;     //Set chip selects as outputs
+    P2OUT |= OE_MATR; // Turn off matrix
+
+
+
+    Flash_Load_Descriptor(&img, 0);
+    img.offset = 0x0000;
+    img.frames = 8;
+    img.period = 10;
 
     while (1)
     {
-        if ((STATUS_VEC & STATUS_BTNUPD) > 0)
+        if ((STATUS_VEC & STATUS_BTN_1) > 0)
         {
-            index = findBtn(BTN_VAL);
-            Status_Set((index > 2) ? 1:0);
-
-            CURR_SENSOR = FlashLoad(index, DISP_BUF);
-            if(index < 3){
-                Eyes_Set(DISP_BUF[128]); // Set eyes to display RED
-            } else {
-                Eyes_Set(DISP_BUF[16]); // Set eyes to display RED
-            }
+            Status_Set(STATUS_LED_OFF);
+            volatile char succ = Flash_Load_Descriptor(&img, btnIndex);
+            FRAME_CNTR = 0;
+            FRAME_OFFS = IMG_MEM_BASE + img.offset;
+            btnIndex = 0;
         }
 
-        if ((STATUS_VEC & STATUS_MICUPD) > 0)
+        if ((STATUS_VEC & STATUS_BTN_2) > 0)
         {
-            sensorData[3] = findVolume();
+            Status_Set(1 << ((btnIndex++) & 0x01));
+            if (btnIndex >= N_DESCRIPTORS)
+            {
+                btnIndex = 0;
+                Status_Set(STATUS_LED_OFF);
+            }
         }
 
         if ((STATUS_VEC & STATUS_UART) > 0)
@@ -151,6 +145,8 @@ int main(void)
             handleUART();
             clearUARTbuf();
         }
+
+        STATUS_VEC = 0; // Clear status vector
         __bis_SR_register(CPUOFF + GIE);        // Enter LPM0, enable interrupts
     }
 }

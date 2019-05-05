@@ -12,106 +12,106 @@
 #ifndef FLASH_H_
 #define FLASH_H_
 
-#define FLASH_DYN_SIZE 130  // Dynamic img allocated size (2*8*8 bytes image + 2 byte config)
-#define FLASH_STA_SIZE 18  // Static img allocated size (2*8 byte + 2 byte config)
-#define FLASH_IMAGE_MEMORY_SIZE 512 // Image memory size, in bytes
+#define FLASH_SEGMENT_SIZE 0x0200 // Smallest erasable partition of memory
 
-const int FLASH_IMAGE_OFFSET[6] = { 0, FLASH_DYN_SIZE, FLASH_DYN_SIZE * 2,FLASH_DYN_SIZE * 3, FLASH_DYN_SIZE * 3 + FLASH_STA_SIZE, FLASH_DYN_SIZE * 3 + FLASH_STA_SIZE * 2 };
+/* Flash memory map */
+#define IMG_MEM_BASE (unsigned int)0xEE00 // Image data address
+#define IMG_MEM_SIZE (unsigned int)0x1000 // Image data size, 256 frames
 
-#if (FLASH_DYN_SIZE*3 + FLASH_STA_SIZE*3) > FLASH_IMAGE_MEMORY_SIZE
-#error "Total image allocated memory too large"
-#endif
+#define IMG_MEM_PAGES IMG_MEM_SIZE/FLASH_SEGMENT_SIZE // Number of pages in flash occupied by images
 
-void Flash_Write_Start(int* startAddr)
+#define DESC_MEM_BASE (unsigned int)0x1080 // Configuration data address
+#define DESC_MEM_SIZE (unsigned int)0x0040 // Configuration data size
+
+#define N_DESCRIPTORS 8 // Number of images allowed to be loaded from flash
+
+void Flash_Erase_Descriptors(void)
 {
     char *Flash_ptr;                          // Flash pointer
+    Flash_ptr = (char *) DESC_MEM_BASE;        // Initialize Flash pointer
 
-    Flash_ptr = (char *) startAddr;           // Initialize Flash pointer
     FCTL1 = FWKEY + ERASE;                    // Set Erase bit
     FCTL3 = FWKEY;                            // Clear Lock bit
+
     *Flash_ptr = 0;                        // Dummy write to erase Flash segment
 
-    FCTL1 = FWKEY + WRT;                      // Set WRT bit for write operation
+    FCTL3 = FWKEY + LOCK;                     // Set LOCK bit
 }
 
-void Flash_Write(unsigned int* startAddr, int dataSize, unsigned char* data)
+char Flash_Load_Descriptor(struct imageDescriptor *descriptor,
+                           unsigned char index)
+{
+    if (index >= N_DESCRIPTORS)
+        return -1;
+
+    unsigned int* p = (DESC_MEM_BASE + (sizeof(struct imageDescriptor)) * index);
+
+    descriptor->offset = *p;
+    descriptor->frames = *(p+2);
+    descriptor->period = *(p+4);
+    descriptor->mode = *(p+5);
+    //memcpy((void*)descriptor, (void*)(DESC_MEM_BASE + (sizeof(struct imageDescriptor)) * index), sizeof(struct imageDescriptor) );
+    //descriptor = (struct imageDescriptor*) (DESC_MEM_BASE + (sizeof(struct imageDescriptor)) * index);
+
+    if (descriptor->period == 0xFFFF)
+        return -1;
+
+    return 0;
+}
+
+void Flash_Erase_Images(void)
 {
     char *Flash_ptr;                          // Flash pointer
+    Flash_ptr = (char *) IMG_MEM_BASE;        // Initialize Flash pointer
+
+    FCTL1 = FWKEY + ERASE;                    // Set Erase bit
+    FCTL3 = FWKEY;                            // Clear Lock bit
+
+    int page;
+    for (page = 0; page < IMG_MEM_PAGES; page++)
+    {
+        *Flash_ptr = 0;                    // Dummy write to erase Flash segment
+        Flash_ptr += FLASH_SEGMENT_SIZE; // Increment pointer to next segment base
+    }
+
+    FCTL3 = FWKEY + LOCK;                     // Set LOCK bit
+}
+
+char inImgMem(unsigned int* base, int length)
+{
+    if ((*base < IMG_MEM_BASE )
+            || ((*base + length) > (IMG_MEM_BASE + IMG_MEM_SIZE )))
+        return 0;
+    return 1;
+}
+char inDescMem(unsigned int* base, int length)
+{
+    if ((*base < DESC_MEM_BASE )
+            || ((*base + length) > (DESC_MEM_BASE + DESC_MEM_SIZE )))
+        return 0;
+    return 1;
+}
+
+void Flash_Write(unsigned int startAddr, unsigned char data[], int dataSize)
+{
+    // Is addressed memory in allowed regions?
+    if (!(inImgMem(startAddr, dataSize) || inDescMem(startAddr, dataSize)))
+        return;
+
+    unsigned int *Flash_ptr;                          // Flash pointer
     unsigned int i;
-    Flash_ptr = (char *) startAddr;           // Initialize Flash pointer
+    Flash_ptr = (unsigned int *) startAddr;           // Initialize Flash pointer
+
+    FCTL1 = FWKEY + WRT;                      // Set WRT bit for write operation
+    FCTL3 = FWKEY;                            // Clear Lock bit
 
     for (i = 0; i < dataSize; i++)
     {
-        *Flash_ptr++ = *data++;               // Write value to flash
+        *(Flash_ptr++) = data[i+6];               // Write value to flash
     }
-}
 
-void Flash_Write_End()
-{
     FCTL1 = FWKEY;                            // Clear WRT bit
     FCTL3 = FWKEY + LOCK;                     // Set LOCK bit
 }
 
-void Flash_Read(unsigned int* startAddr, int dataSize, unsigned char data[])
-{
-    char *Flash_ptr;                  // Flash pointer
-    unsigned int i;
-
-    Flash_ptr = (char *) startAddr;   // Initialize Flash pointer
-
-    for (i = 0; i < dataSize; i++)
-    {
-        data[i] = *Flash_ptr++;       // Read value from flash
-    }
-}
-
-/* FlashImages(image[])
- * Storeas an image to flash
- *
- * image[]: Array with the image to be stored.
- *
- */
-void FlashImages(unsigned char image[])
-{
-    Flash_Write_Start (IMG_MEM_ADDR); // Start writing to address
-
-    char imgIndex = ((image[130]&0x10)>>4)*3; // = 4 if dynamic, 0 if static
-    imgIndex += (image[130] & 0x03); // + actual index [0-2]
-    unsigned int i;
-    for (i = 0; i < 6; i++)
-    {
-        if (i == imgIndex)
-        {
-            Flash_Write(IMG_MEM_ADDR + FLASH_IMAGE_OFFSET[i],
-                        (i < 3) ? (FLASH_DYN_SIZE) : (FLASH_STA_SIZE), image);
-        }
-        else
-        {
-            Flash_Write(IMG_MEM_ADDR + FLASH_IMAGE_OFFSET[i],
-                        (i < 3) ? FLASH_DYN_SIZE : FLASH_STA_SIZE,
-                        (IMG_MEM_BUFF + FLASH_IMAGE_OFFSET[i]));
-        }
-    }
-    Flash_Write_End();
-
-    Flash_Write_Start (IMG_MEM_BUFF);
-    Flash_Write(IMG_MEM_BUFF, FLASH_IMAGE_MEMORY_SIZE, IMG_MEM_ADDR);
-    Flash_Write_End();
-}
-;
-
-
-/* FlashLoad(index, image[])
- * Reads an image from flash to image[] array
- *
- * index: image index ( 0-2: dynamic, 1-5: static)
- * image[]: Array where the read image is stored.
- */
-unsigned char FlashLoad(unsigned int index, unsigned char image[]){
-    Flash_Read(IMG_MEM_ADDR + FLASH_IMAGE_OFFSET[index], (index < 3) ? (FLASH_DYN_SIZE) : (FLASH_STA_SIZE), image); // Read dynamic image number 0.
-
-    unsigned char sensor = ((image[129]) >= NUM_SENSORS)?NUM_SENSORS-1:image[129]; // Return sensor dependence
-    if(index >= 3) sensor = NUM_SENSORS-1;
-    return sensor;
-}
 #endif /* FLASH_H_ */
