@@ -29,8 +29,10 @@ File folders may be stored anywhere on the computer, and can look something like
 
 Test
  |_ IMG0_FRAME_200_R_R.png	(Frame image with both eyes red, updating every 200 ms)
- |_ IMG1_SWEEP_100_G.png		(Sweeping image, both eyes green)
+ |_ IMG0_SWEEP_200.png		(Duplicate index, will be ignored)
+ |_ IMG1_SWEEP_100_G.png	(Sweeping image, both eyes green)
  |_ IMG2_FRAME_1000_RGB_B.png	(White/Blue eyes)
  |_ IMG3.png			(Frame, 100 ms updates, eyes off)
  |_ IMG4_FRAME_100_O_RG.png	(Left eye off, right eye yellow)
  |_ IMG6_FRAME_1500.png		(both eyes off)
+ |_ IMG22.png			(Index larger than 7, will be ignored)
