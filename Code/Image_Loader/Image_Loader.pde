@@ -209,8 +209,8 @@ byte[] processimage(String path) {
       rEye |= temp[w-8+a] << (a);
     }
 
-    data[row*2]   = lEye;
-    data[row*2+1] = rEye;
+    data[row*2]   = rEye;
+    data[row*2+1] = lEye;
   }
 
   return data;

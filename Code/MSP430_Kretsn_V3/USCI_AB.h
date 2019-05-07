@@ -6,7 +6,6 @@
  *      -- USCI_A0: receive data over UART
  *      -- USCI_B0: Transmit/Receive data over SPI
  *          - Send data to Shift registers
- *          - Send/receive data to/from accelerometer
  *
  *  Created on: 17 Jan 2018
  *      Author: Mandus
@@ -15,18 +14,22 @@
 #ifndef USCI_AB_H_
 #define USCI_AB_H_
 
+#define UART_CMD_CLR_IM    0x636C
+#define UART_CMD_CLR_DESC  0x6465
+#define UART_CMD_WRT_FLASH 0x7772
+#define UART_CMD_IDENTITY  0x6964
+
+#define UART_RX BIT1
+#define UART_TX BIT2
+unsigned int UART_BYTE_CNTR = 0;
+
 #define SPIMOSI BIT7
 #define SPIMISO BIT6
 #define SPICLK  BIT5
 #define SPI_PINS SPIMOSI | SPIMISO | SPICLK
 
-#define SPI_TX_BUF_SIZE 2
-unsigned char SPI_BYTE_COUNTER = 0;
-unsigned char SPI_TX_BUF[SPI_TX_BUF_SIZE] = { 0 };
+unsigned char BYTE_CNTR   = 0;     // Byte counter for matrix updating
 
-#define UART_RX BIT1
-#define UART_TX BIT2
-unsigned int UART_BYTE_CNTR = 0;
 
 void USCI_A0_Init()
 {
@@ -43,28 +46,28 @@ void USCI_A0_Init()
 
 void USCI_B0_Init()
 {
-    P1SEL |= SPI_PINS;                        // Assign SPI pins to USCI_B0
-    P1SEL2 |= SPI_PINS;                       // Assign SPI pins to USCI_B0
+    P1SEL |= SPI_PINS;                          // Assign SPI pins to USCI_B0
+    P1SEL2 |= SPI_PINS;                         // Assign SPI pins to USCI_B0
 
-    P2DIR |= CS_MATR | CS_ACCL | OE_MATR;     //Set chip selects as outputs
-    P2OUT |= OE_MATR;                         // Turn off matrix
-    P3DIR |= ROWSEL_1 | ROWSEL_2 | ROWSEL_3;  // Row select pins
+    P2DIR |= CS_MATR | OE_MATR;                 //Set chip selects as outputs
+    P3DIR |= ROWSEL_1 | ROWSEL_2 | ROWSEL_3;    // Row select pins
     P3OUT &= ~(ROWSEL_1 | ROWSEL_2 | ROWSEL_3);
 
-    UCB0CTL1 |= UCSWRST;                      // Enable SW reset
+    UCB0CTL1 |= UCSWRST;                        // Enable SW reset
 
-    UCB0CTL0 = UCCKPH | UCMSB | UCMST | UCMODE_0 | UCSYNC; // Leading edge phase, MSB first, SPI Master, 3-wore SPI, synchronous mode
-    UCB0CTL1 = UCSSEL_2 | UCSWRST;            // Use SMCLK, keep SW reset
-    UCB0BR0 = 1;                              // fSCL = SMCLK/1 = ~1MHz
+    UCB0CTL0 = UCCKPH | UCMSB | UCMST | UCMODE_0 | UCSYNC; // Leading edge phase, MSB first, SPI Master, 3-wire SPI, synchronous mode
+    UCB0CTL1 = UCSSEL_2 | UCSWRST;              // Use SMCLK, keep SW reset
+
+    UCB0BR0 = 100;                              // fSCL = SMCLK/255 = ~4kHz <- SPI clock speed
+                                                // 128 bits/frame, 4000/128 ~30fps
     UCB0BR1 = 0;
-    UCB0CTL1 &= ~UCSWRST;                    // Clear SW reset, resume operation
-    IE2 |= UCB0TXIE;                          // Enable RX interrupt
-}
+    UCB0CTL1 &= ~UCSWRST;                       // Clear SW reset, resume operation
+    IE2 |= UCB0RXIE;                            // Enable RX interrupt
 
-#define UART_CMD_CLR_IM    0x636C
-#define UART_CMD_CLR_DESC  0x6465
-#define UART_CMD_WRT_FLASH 0x7772
-#define UART_CMD_IDENTITY  0x6964
+    P2OUT &= ~OE_MATR;                          // Turn on matrix
+    UCB0TXBUF = 0xFF;                           // Kick off SPI infinity madness
+
+}
 
 void handleUART()
 {
@@ -84,9 +87,8 @@ void handleUART()
     }
     case UART_CMD_WRT_FLASH:
     {
-        unsigned int  base   = (UART_Buf[2] << 8 | UART_Buf[3]);
+        unsigned int base = (UART_Buf[2] << 8 | UART_Buf[3]);
         unsigned char length = UART_Buf[4];
-//        unsigned char *p     = (unsigned char*)(UART_Buf[6]);
         Flash_Write(base, UART_Buf, length);
         break;
     }
@@ -120,36 +122,16 @@ __interrupt void USCIAB0TX_ISR(void)
 {
     if ((IFG2 & UCA0TXIFG) > 0) //UART Transmit buffer ready
     {
-
         if (UART_BYTE_CNTR > 0)
         {
             UCA0TXBUF = UART_Buf[--UART_BYTE_CNTR];
         }
-
         IFG2 &= ~UCA0TXIFG;
     }
 
     if ((IFG2 & UCB0TXIFG) > 0) //SPI Transmit buffer ready
     {
-        if (SPI_BYTE_COUNTER < SPI_TX_BUF_SIZE)
-        {
-//            P2OUT &= ~CS_MATR;
-            UCB0TXBUF = SPI_TX_BUF[SPI_BYTE_COUNTER++];
-        }
-        else
-        {
-            P2OUT |= OE_MATR; // Turn off matrix
 
-            P2OUT |= CS_MATR; // Load shift register storage registers
-
-            P3OUT &= ~(ROWSEL_1 | ROWSEL_2 | ROWSEL_3); // Clear row pins
-            P3OUT |= ROW_CNTR << 5; // Select row to turn on
-
-            P2OUT &= ~CS_MATR;
-
-            P2OUT &= ~(OE_MATR); // Turn on matrix
-            IE2 &= ~(UCB0TXIE); // Done transmitting, disable TX interrupt
-        }
     }
 }
 
@@ -158,7 +140,7 @@ __interrupt void USCIAB0TX_ISR(void)
 __interrupt void USCIAB0RX_ISR(void)
 {
 
-    if (IFG2 & UCA0RXIFG > 0) //UART triggered interrupt
+    if ((IFG2 & UCA0RXIFG) > 0) //UART triggered interrupt
     {
         // Buffer data in receive array
         UART_Buf[UART_Available] = UCA0RXBUF;
@@ -171,12 +153,29 @@ __interrupt void USCIAB0RX_ISR(void)
         UART_DOONCE = 1;
         WDTCTL = WDT_MDLY_32;            // Set Watchdog Timer interval to ~30ms
         IE1 |= WDTIE;   // Enable WDT interrupt
-
     }
 
-    if (IFG2 & UCB0RXIFG > 0) //SPI triggered interrupt
+    if ((IFG2 & UCB0RXIFG) > 0) //SPI triggered RX interrupt, meaning that TX is done
     {
 
+        // Which side was sent in last transfer?
+        if ((BYTE_CNTR & 0x01) == 0x01) // Odd counter => Left eye => update matrix and row selection pins
+        {
+            P2OUT |= OE_MATR;   // Turn off matrix
+            P2OUT |= CS_MATR;   // Load shift register storage registers
+
+            P3OUT &= ~(ROWSEL_1 | ROWSEL_2 | ROWSEL_3); // Clear row pins
+            P3OUT |= (BYTE_CNTR>>1) << 5;           // Select row to turn on
+
+            P2OUT &= ~(OE_MATR | CS_MATR);  // Turn on matrix
+        } else {
+        }
+
+        BYTE_CNTR = (++BYTE_CNTR) & 0x0F;   //limit to [0 15] (one "frame")
+        char *p = (FRAME_OFFS + BYTE_CNTR); // Find index of current byte to send
+        UCB0TXBUF = *(p);               // Send the next byte
+
+        IFG2 &= ~UCB0RXIFG;
     }
 }
 

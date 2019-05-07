@@ -41,7 +41,6 @@ unsigned char UART_Buf[UART_BUFSIZE];
 #define NUM_SENSORS 8           //Number of sensors
 unsigned int  FRAME_CNTR = 0;   // Current frame that is displayed
 unsigned int  FRAME_OFFS = 0;   // Current frame offset
-unsigned char ROW_CNTR   = 0;     // Row counter for matrix updating
 
 /* Status definitions for CPU wake-ups */
 unsigned int STATUS_VEC = 0;
@@ -53,8 +52,6 @@ unsigned int STATUS_VEC = 0;
 /* Pin mappings */
 
 // PORT 1
-#define MIC_PIN         BIT0
-#define MIC_INCH        INCH_0
 #define BTN_PIN         BIT3
 #define BTN_INCH        INCH_3
 #define PIN_INDICATOR   BIT4
@@ -66,7 +63,6 @@ unsigned int STATUS_VEC = 0;
 
 #define CS_MATR BIT3
 #define OE_MATR BIT4
-#define CS_ACCL BIT5
 
 // PORT 3
 #define ACC_INT1 BIT0

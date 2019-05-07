@@ -3,7 +3,8 @@
  *
  *  Timer B header file
  *  Functions:
- *      -- Increment time
+ *      -- Increment image frame offset
+ *      -- Start button samples
  *
  *  Created on: 17 Jan 2018
  *      Author: Mandus
@@ -14,9 +15,11 @@
 
 void TIMER_A1_Init()
 {
+
+    TA1CTL = TASSEL_2 | MC_2 | ID_3 | TAIE;  // SMCLK, Continuous Up, div by 8
+
     TA1CCR0 = 100;                           // TA1CCR0 start value
     TA1CCTL0 |= CCIE;                        // TA1CCR0 interrupt enabled
-    TA1CTL = TASSEL_2 | MC_2 | ID_3 | TAIE;  // SMCLK, Continuous Up, div by 8
 
     TA1CCTL1 |= OUTMOD_4;
     TA1CCTL1 &= ~CCIE;                       // TA1CCR1 interrupt disabled
@@ -27,7 +30,7 @@ void TIMER_A1_Init()
 #pragma vector = TIMER1_A0_VECTOR
 __interrupt void T1A0_ISR(void)
 {
-    TA1CCR0 += 12500; // add offset, ~10Hz, 4625 ticks/s, period (seconds) = TA1CCR0/4625
+    TA1CCR0 += 12500; // add offset, ~10Hz
 
     static int counter = 0;
     counter++;
@@ -49,7 +52,7 @@ __interrupt void T1A0_ISR(void)
         }
 
 
-        // Is there data to display?
+        // Are we at the end of the image?
         if (FRAME_CNTR + 16 > img.size)
             FRAME_CNTR = 0;
 
@@ -63,15 +66,14 @@ __interrupt void T1A0_ISR(void)
 #pragma vector = TIMER1_A1_VECTOR
 __interrupt void T1A1_ISR(void)
 {
-    static unsigned char counter = 0;
     switch (TA1IV)
     {
-    case 2:                                 // CCR1 not used
-        break;
+    case 2:
+        break;   // CCR1 not used
     case 4:
-        break;                                 // CCR2 not used
+        break;   // CCR2 not used
     case 10:
-        break;                                 // overflow not used
+        break;   // overflow not used
     }
 }
 

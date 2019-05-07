@@ -108,12 +108,10 @@ int main(void)
     Eyes_Set(0x00); // Eyes off
     Status_Set(STATUS_LED_OFF);
 
-    P2DIR |= CS_MATR | CS_ACCL | OE_MATR;     //Set chip selects as outputs
-    P2OUT |= OE_MATR; // Turn off matrix
-
-
     n_descriptors = Flash_Count_Descriptors();
     Flash_Load_Descriptor(&img, 0);
+    FRAME_OFFS = IMG_MEM_BASE + img.offset; // Calculate flash index of first element in current frame
+
     Eyes_Set(img.eyes);
 
     while (1)
