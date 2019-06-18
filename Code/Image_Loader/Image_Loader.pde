@@ -12,16 +12,7 @@ String[] commands;
 int nDescriptors = 8;
 Serial myPort;
 int offset = 0;
-
-int str2mode(String str) {
-  if(str.equals("FRAME"))
-    return 1;
-  if(str.equals("SWEEP"))
-    return 2;
-    
-  return -1;
-}
-
+String modes[] = {"FRAME", "SWEEP"};
 
 public class Setting {
   public String name, type;
@@ -29,26 +20,20 @@ public class Setting {
 
   Setting(String name) {
     this.name = name;
-    this.type = "FRAME";
+    //this.type = "FRAME";
     this.mode = 1;
     this.period = 1000;
     this.eyes = 0;
   }
 
-  Setting(String name, String type, int period) {
-    this.name = name;
-    this.type = type;
-    this.mode = str2mode(type);
-    this.period = period;
-  }
-
   void display() {
     println("Path:   " + this.name);
-    println("Type:   " + this.type);
+    println("Mode:   " + modes[this.mode-1]);
     println("Period: " + str(this.period));
     println("Offset: " + hex(this.offset));
     println("Size:   " + str(this.size));
-    println("Eyes:   " + hex(this.eyes));
+    println("Eyes:   " + String.format("%8s", Integer.toBinaryString(this.eyes)).replace(' ', '0') );
+    
   }
 }
 
@@ -129,37 +114,34 @@ void folderSelected(File selection) {
     settingcounter = 0;
     // we'll have a look in the data folder
     java.io.File folder = new java.io.File(selection.getAbsolutePath());
-
     // list the files in the data folder
     String[] filenames = folder.list();
 
     // Attempt to find images
     for (int i = 0; i < nDescriptors; i++) {
-      String multiArg = "IMG" + (str(i)) + ("_");
-      String singleArg = "IMG" + (str(i)) + (".");
       for (int j = 0; j < filenames.length; j++) {
         String file = filenames[j];
-
-        if (file.indexOf(singleArg) == 0)
+        
+        String[] m = match(file, "^IMG"+str(i)+"[^.]*.png"); // Is there a file called IMGi--------.png?
+        
+        if(m != null) // Found file with current index
         {
           Setting setting = new Setting(file);
+          
+          m = match(file, "_M-?([1-"+str(modes.length)+"])"); // Look for mode switch
+          if(m != null) setting.mode = int(m[1]);
+          
+          m = match(file, "_P-?(\\d+)"); // Look for Period switch
+          if(m != null) setting.period = int(m[1]);
+
+          m = match(file, "_L([0-7])"); // Look for left eye switch
+          if(m != null) setting.eyes += Integer.parseInt(m[1])<<4;
+
+          m = match(file, "_R([0-7])"); // Look for Right eye switch
+          if(m != null) setting.eyes += Integer.parseInt(m[1]);
+
+          // Add setting to array 
           settings[settingcounter++] = setting;
-          break;
-        } else if (file.indexOf(multiArg) == 0)
-        {
-          String[] temp = split(split(file, ".")[0], "_");
-          Setting setting = new Setting(file, temp[1], abs(int(temp[2])));
-          setting.eyes = 0x00;
-          if(temp.length == 4){
-            setting.eyes = ((temp[3].indexOf("R")==-1)? 0:1) + ((temp[3].indexOf("G")==-1)? 0:2) + ((temp[3].indexOf("B")==-1)? 0:4);
-            setting.eyes += setting.eyes << 4;
-          } else if (temp.length == 5){
-            setting.eyes = ((temp[3].indexOf("R")==-1)? 0:1) + ((temp[3].indexOf("G")==-1)? 0:2) + ((temp[3].indexOf("B")==-1)? 0:4);
-            setting.eyes <<= 4;
-            setting.eyes += ((temp[4].indexOf("R")==-1)? 0:1) + ((temp[4].indexOf("G")==-1)? 0:2) + ((temp[4].indexOf("B")==-1)? 0:4);          
-          }
-          settings[settingcounter++] = setting;
-          break;
         }
       }
     }
@@ -263,10 +245,10 @@ void writeToGlasses(byte[] data) {
   for (int i = 0; i < settingcounter; i++) {
     Setting s = settings[i];
     byte[] desc = new byte[8];
-    desc[0] = (byte)(s.offset&0xFF);
-    desc[1] = (byte)(s.offset>>8);
-    desc[2] = (byte)(s.size&0xFF);
-    desc[3] = (byte)(s.size>>8);
+    desc[0] = (byte)(s.offset>>8);
+    desc[1] = (byte)(s.offset&0xFF);
+    desc[2] = (byte)(s.size>>8);
+    desc[3 ] = (byte)(s.size&0xFF);
     desc[4] = (byte)(floor(s.period/100)&0xFF); 
     desc[5] = (byte)(s.mode&0xFF);
     desc[6] = (byte)(s.eyes);
@@ -282,8 +264,13 @@ void writeToGlasses(byte[] data) {
   myPort.write(concat(CMD, chunked));
   delay(400);
   println("Done");
-  
-  println(hex(CMD[2]) + " " + hex(CMD[3]));
+  println();
+  println("Wrote following descriptors at address: 0x" + hex(CMD[2]) + hex(CMD[3]) + ":");
+  println();
+  println("                / Period");
+  println("/ Offset        |   / Mode");
+  println("|       / Size  |   |   / Eyes  ");
+  println("|_____  |_____  |_  |_  |_");
   for(int i = 0; i < chunked.length; i++){
     print(hex(chunked[i]) + ", ");
     if((i+1)%8 == 0)

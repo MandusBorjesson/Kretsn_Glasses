@@ -31,7 +31,8 @@ unsigned char Flash_Count_Descriptors(void)
     char *p = (char*)DESC_MEM_BASE;                          // Flash pointer
     int i;
     for(i= 0; i < MAX_DESCRIPTORS; i++){
-        if(p[5] == 0xFF){
+        if(p[6] == 0xFF) // If eyes are 0xFF, which they should not be... return index
+        {
             return i;
         }
         p += DESC_SIZE;
@@ -51,26 +52,27 @@ void Flash_Erase_Descriptors(void)
     *Flash_ptr = 0;                        // Dummy write to erase Flash segment
 
     FCTL3 = FWKEY + LOCK;                     // Set LOCK bit
+    n_descriptors = 0;
 }
 
 char Flash_Load_Descriptor(struct imageDescriptor *descriptor,
                            unsigned char index)
 {
     if (index >= n_descriptors)
-        return -1;
+        return 0;
 
     unsigned char* p = (DESC_MEM_BASE + DESC_SIZE * index);
 
-    descriptor->offset = p[0]+(p[1] << 8);
-    descriptor->size   = p[2]+(p[3] << 8);
+    descriptor->offset = p[1]+(p[0] << 8);
+    descriptor->size   = p[3]+(p[2] << 8);
     descriptor->period = p[4];
     descriptor->mode   = p[5];
     descriptor->eyes   = p[6];
 
-    if (descriptor->period == 0xFFFF)
-        return -1;
+    if (descriptor->eyes == 0xFF)
+        return 0;
 
-    return 0;
+    return 1;
 }
 
 void Flash_Erase_Images(void)
@@ -91,17 +93,17 @@ void Flash_Erase_Images(void)
     FCTL3 = FWKEY + LOCK;                     // Set LOCK bit
 }
 
-char inImgMem(unsigned int* base, int length)
+char inImgMem(unsigned int base, int length)
 {
-    if ((*base < IMG_MEM_BASE )
-            || ((*base + length) > (IMG_MEM_BASE + IMG_MEM_SIZE )))
+    if ((base < IMG_MEM_BASE )
+            || ((base + length) > (IMG_MEM_BASE + IMG_MEM_SIZE )))
         return 0;
     return 1;
 }
-char inDescMem(unsigned int* base, int length)
+char inDescMem(unsigned int base, int length)
 {
-    if ((*base < DESC_MEM_BASE )
-            || ((*base + length) > (DESC_MEM_BASE + DESC_MEM_SIZE )))
+    if ((base < DESC_MEM_BASE )
+            || ((base + length) > (DESC_MEM_BASE + DESC_MEM_SIZE )))
         return 0;
     return 1;
 }
@@ -121,7 +123,7 @@ void Flash_Write(unsigned int startAddr, unsigned char data[], int dataSize)
 
     for (i = 0; i < dataSize; i++)
     {
-        *(Flash_ptr++) = data[i+6];               // Write value to flash
+        *(Flash_ptr++) = data[i];               // Write value to flash
     }
 
     FCTL1 = FWKEY;                            // Clear WRT bit

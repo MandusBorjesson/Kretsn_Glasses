@@ -38,46 +38,8 @@
  * ------------------|
  */
 
-/* --- Image array format ---
- *
- * Index:   [ Slot contains    ]    Value meaning
- *
- * 0:       [ Image data       ]    Row data to be displayed
- * 1:       [ Image data       ]    Row data to be displayed
- * 2:       [        :         ]
- * 3:                :
- *                   :
- * 128:     [ Eye color        ]    Bits 7-4 : 1-> static, others->dynamic Bits 3-0: image index
- * 129:     [ Image dependence ]    -> currSensor
- */
-
-/* --- sensorData array format ---
- *
- *  All values range from 0 to 7, representing
- *  one slot each in dynamic image arrays.
- *
- * Index:   [ Slot contains   ]    Description
- *
- * 0:       [ Fast time       ]    ~10Hz
- * 1:       [ Medium Time     ]    1/2 Fast time
- * 2:       [ Slow time       ]    1/4 Fast time
- * 3:       [ Volume          ]    Incoming sound volume
- * 4:       [ Accelerometer x ]
- * 5:       [ Accelerometer y ]
- * 6:       [ Accelerometer z ]
- * 7:       [ 0               ]    Used for static images
- */
-
-/* --- Flash structure ---
- *
- * Adress:        [ Slot contains     ]   Size (Bytes)
- *
- * IMG_MEM_ADDR:  [ All images        ]   512
- * CFG_MEM_ADDR:  [ Configuration data]   64
- *
- */
-
 #include <msp430g2553.h>
+#include <string.h>
 #include "Definitions.h"
 
 #include "FLASH.h"
@@ -88,8 +50,6 @@
 #include "TIMER_A1.h"
 #include "DCO.h"
 #include "WDT.h"
-
-unsigned int testData[64] = { IMG_MEM_BASE, 32, 5 };
 
 int main(void)
 {
@@ -109,7 +69,15 @@ int main(void)
     Status_Set(STATUS_LED_OFF);
 
     n_descriptors = Flash_Count_Descriptors();
-    Flash_Load_Descriptor(&img, 0);
+    if(n_descriptors == 0){
+        img.offset = 0;
+        img.size = 1;
+        img.period = 10;
+        img.mode = 1;
+        img.eyes = 0x77;
+    } else {
+        Flash_Load_Descriptor(&img, 0);
+    }
     FRAME_OFFS = IMG_MEM_BASE + img.offset; // Calculate flash index of first element in current frame
 
     Eyes_Set(img.eyes);
@@ -128,7 +96,8 @@ int main(void)
 
         if ((STATUS_VEC & STATUS_BTN_2) > 0)
         {
-            Status_Set(1 << ((btnIndex++) & 0x01));
+            btnIndex++;
+            Status_Set(((btnIndex & 0x01) > 0) ? STATUS_LED_RED : STATUS_LED_GRN);
             if (btnIndex >= n_descriptors)
             {
                 btnIndex = 0;

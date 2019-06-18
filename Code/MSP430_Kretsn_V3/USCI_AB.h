@@ -31,6 +31,8 @@ unsigned int UART_BYTE_CNTR = 0;
 unsigned char BYTE_CNTR   = 0;     // Byte counter for matrix updating
 
 
+
+// UART Initialization
 void USCI_A0_Init()
 {
     P1SEL = UART_RX | UART_TX;                // P1.1 = RXD, P1.2=TXD
@@ -41,17 +43,18 @@ void USCI_A0_Init()
     UCA0BR1 = 0x00;                           // 1MHz 9600 Baud
     UCA0MCTL = UCBRS0;                        // Modulation UCBRSx = 1
     UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
-    IE2 |= UCA0RXIE | UCA0TXIE;               // Enable USCI_A0 RX interrupt
+    IE2 |= UCA0RXIE | UCA0TXIE;               // Enable USCI_A0 TX/RX interrupt
 }
 
+// SPI Initialization
 void USCI_B0_Init()
 {
     P1SEL |= SPI_PINS;                          // Assign SPI pins to USCI_B0
     P1SEL2 |= SPI_PINS;                         // Assign SPI pins to USCI_B0
 
-    P2DIR |= CS_MATR | OE_MATR;                 //Set chip selects as outputs
-    P3DIR |= ROWSEL_1 | ROWSEL_2 | ROWSEL_3;    // Row select pins
-    P3OUT &= ~(ROWSEL_1 | ROWSEL_2 | ROWSEL_3);
+    P2DIR |= CS_MATR | OE_MATR;                 //Set chip select and output enable as outputs
+    P3DIR |= ROWSEL_1 | ROWSEL_2 | ROWSEL_3;    // Row select pins as outputs
+    P3OUT &= ~(ROWSEL_1 | ROWSEL_2 | ROWSEL_3); // Pull all row select pins LOW
 
     UCB0CTL1 |= UCSWRST;                        // Enable SW reset
 
@@ -64,7 +67,7 @@ void USCI_B0_Init()
     UCB0CTL1 &= ~UCSWRST;                       // Clear SW reset, resume operation
     IE2 |= UCB0RXIE;                            // Enable RX interrupt
 
-    P2OUT &= ~OE_MATR;                          // Turn on matrix
+    P2OUT |= OE_MATR;                           // Turn off matrix
     UCB0TXBUF = 0xFF;                           // Kick off SPI infinity madness
 
 }
@@ -89,7 +92,10 @@ void handleUART()
     {
         unsigned int base = (UART_Buf[2] << 8 | UART_Buf[3]);
         unsigned char length = UART_Buf[4];
-        Flash_Write(base, UART_Buf, length);
+        Flash_Write(base, &(UART_Buf[6]), length);
+        if(base == DESC_MEM_BASE){
+            n_descriptors = Flash_Count_Descriptors();
+        }
         break;
     }
     case UART_CMD_IDENTITY:
@@ -109,11 +115,13 @@ void handleUART()
 
 void clearUARTbuf()
 {
+    memset(UART_Buf, 0, UART_BUFSIZE);
+/*
     unsigned int i;
     for (i = UART_BUFSIZE - 1; i >= 0; i--)
     {
         UART_Buf[i] = 0;
-    }
+    }*/
     UART_Available = 0;
 }
 // USCI A/B Transmit done interrupt vector
@@ -167,7 +175,7 @@ __interrupt void USCIAB0RX_ISR(void)
             P3OUT &= ~(ROWSEL_1 | ROWSEL_2 | ROWSEL_3); // Clear row pins
             P3OUT |= (BYTE_CNTR>>1) << 5;           // Select row to turn on
 
-            P2OUT &= ~(OE_MATR | CS_MATR);  // Turn on matrix
+            P2OUT &= ~(OE_MATR | CS_MATR);  // Turn on matrix, CS HIGH
         } else {
         }
 
