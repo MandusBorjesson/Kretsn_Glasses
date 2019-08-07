@@ -14,18 +14,6 @@
 
 #define FLASH_SEGMENT_SIZE 0x0200 // Smallest erasable partition of memory
 
-/* Flash memory map */
-#define IMG_MEM_BASE (unsigned int)0xEE00 // Image data address
-#define IMG_MEM_SIZE (unsigned int)0x1000 // Image data size, 256 frames
-
-#define IMG_MEM_PAGES IMG_MEM_SIZE/FLASH_SEGMENT_SIZE // Number of pages in flash occupied by images
-
-#define DESC_MEM_BASE (unsigned int)0x1080 // Configuration data address
-#define DESC_MEM_SIZE (unsigned int)0x0040 // Configuration data size
-
-#define MAX_DESCRIPTORS 8 // Number of images allowed to be loaded from flash
-unsigned char n_descriptors = 0;
-
 unsigned char Flash_Count_Descriptors(void)
 {
     char *p = (char*)DESC_MEM_BASE;                          // Flash pointer
@@ -40,20 +28,31 @@ unsigned char Flash_Count_Descriptors(void)
     return MAX_DESCRIPTORS;
 }
 
-
-void Flash_Erase_Descriptors(void)
+void Flash_Erase(unsigned int base)
 {
-    char *Flash_ptr = (char*)DESC_MEM_BASE;                          // Flash pointer
-//    Flash_ptr = ;        // Initialize Flash pointer
+    // Is addressed memory in allowed regions?
+     if (!inAllowedMem(base, INFO_SIZE))
+         return;
+
+    char *Flash_ptr = (char*)base; // Flash pointer
 
     FCTL1 = FWKEY + ERASE;                    // Set Erase bit
     FCTL3 = FWKEY;                            // Clear Lock bit
 
-    *Flash_ptr = 0;                        // Dummy write to erase Flash segment
+    if(base == IMG_MEM_BASE){
+    int page;
+    for (page = 0; page < IMG_MEM_PAGES; page++)
+    {
+        *Flash_ptr = 0;                    // Dummy write to erase Flash segment
+        Flash_ptr += FLASH_SEGMENT_SIZE; // Increment pointer to next segment base
+    }
+    } else {
+        *Flash_ptr = 0;        // Dummy write to erase Flash segment
+    }
 
     FCTL3 = FWKEY + LOCK;                     // Set LOCK bit
-    n_descriptors = 0;
 }
+
 
 char Flash_Load_Descriptor(struct imageDescriptor *descriptor,
                            unsigned char index)
@@ -93,25 +92,27 @@ void Flash_Erase_Images(void)
     FCTL3 = FWKEY + LOCK;                     // Set LOCK bit
 }
 
-char inImgMem(unsigned int base, int length)
+char inAllowedMem(unsigned int base, int length)
 {
-    if ((base < IMG_MEM_BASE )
-            || ((base + length) > (IMG_MEM_BASE + IMG_MEM_SIZE )))
-        return 0;
-    return 1;
-}
-char inDescMem(unsigned int base, int length)
-{
-    if ((base < DESC_MEM_BASE )
-            || ((base + length) > (DESC_MEM_BASE + DESC_MEM_SIZE )))
-        return 0;
-    return 1;
+    if ((base >= IMG_MEM_BASE  ) && ((base + length) <= (IMG_MEM_BASE  + IMG_MEM_SIZE  )))
+        return 1;
+
+    if ((base >= DESC_MEM_BASE ) && ((base + length) <= (DESC_MEM_BASE + DESC_MEM_SIZE )))
+        return 1;
+
+    if ((base >= CFG_MEM_BASE ) && ((base + length) <= (CFG_MEM_BASE + CFG_MEM_SIZE )))
+        return 1;
+
+    if ((base >= INFOD_BASE ) && ((base + length) <= (INFOD_BASE + INFOD_SIZE )))
+        return 1;
+
+    return 0;
 }
 
 void Flash_Write(unsigned int startAddr, unsigned char data[], int dataSize)
 {
     // Is addressed memory in allowed regions?
-    if (!(inImgMem(startAddr, dataSize) || inDescMem(startAddr, dataSize)))
+    if (!inAllowedMem(startAddr, dataSize))
         return;
 
     unsigned char *Flash_ptr;                          // Flash pointer

@@ -14,14 +14,13 @@
 #ifndef USCI_AB_H_
 #define USCI_AB_H_
 
-#define UART_CMD_CLR_IM    0x636C
-#define UART_CMD_CLR_DESC  0x6465
-#define UART_CMD_WRT_FLASH 0x7772
-#define UART_CMD_IDENTITY  0x6964
-
 #define UART_RX BIT1
 #define UART_TX BIT2
 unsigned int UART_BYTE_CNTR = 0;
+
+char* UART_TXBUF;
+unsigned char UART_BYTES_TX = 0;
+char UART_TXDONE = 1;
 
 #define SPIMOSI BIT7
 #define SPIMISO BIT6
@@ -29,8 +28,6 @@ unsigned int UART_BYTE_CNTR = 0;
 #define SPI_PINS SPIMOSI | SPIMISO | SPICLK
 
 unsigned char BYTE_CNTR   = 0;     // Byte counter for matrix updating
-
-
 
 // UART Initialization
 void USCI_A0_Init()
@@ -75,22 +72,13 @@ void USCI_B0_Init()
 void handleUART()
 {
     unsigned int UART_CMD = UART_Buf[0] << 8 | UART_Buf[1];
+    unsigned int base = (UART_Buf[2] << 8 | UART_Buf[3]);
 
     switch (UART_CMD)
     {
-    case UART_CMD_CLR_IM:
-    {
-        Flash_Erase_Images();
-        break;
-    }
-    case UART_CMD_CLR_DESC:
-    {
-        Flash_Erase_Descriptors();
-        break;
-    }
     case UART_CMD_WRT_FLASH:
     {
-        unsigned int base = (UART_Buf[2] << 8 | UART_Buf[3]);
+//        unsigned int base = (UART_Buf[2] << 8 | UART_Buf[3]);
         unsigned char length = UART_Buf[4];
         Flash_Write(base, &(UART_Buf[6]), length);
         if(base == DESC_MEM_BASE){
@@ -98,16 +86,31 @@ void handleUART()
         }
         break;
     }
+    case UART_CMD_CLR_FLASH:
+    {
+//        unsigned int base = (UART_Buf[2] << 8 | UART_Buf[3]);
+        Flash_Erase(base);
+        if(base == DESC_MEM_BASE){
+            n_descriptors = 0;
+        }
+        break;
+    }
+    case UART_CMD_READ_FLASH:
+    {
+
+        if (!inAllowedMem(base, INFO_SIZE))
+        {
+            uartTransmit(flash_regions, sizeof(flash_regions)); // Transmit flash information over UART
+        }
+        else
+        {
+            uartTransmit(base, (base == IMG_MEM_BASE)? IMG_MEM_SIZE : INFO_SIZE); // Transmit memory region
+        }
+        break;
+    }
     case UART_CMD_IDENTITY:
     {
-        UART_Buf[0] = IMG_MEM_SIZE >> 8;
-        UART_Buf[1] = IMG_MEM_SIZE & 0xFF;
-        UART_Buf[2] = UART_BUFSIZE >> 8;
-        UART_Buf[3] = UART_BUFSIZE & 0xFF;
-
-        UART_BYTE_CNTR = 4;
-
-        UCA0TXBUF = 0xFF; // Kick off transmission
+        uartTransmit(version_data, sizeof(version_data)); // Transmit version information over UART
         break;
     }
     }
@@ -116,13 +119,15 @@ void handleUART()
 void clearUARTbuf()
 {
     memset(UART_Buf, 0, UART_BUFSIZE);
-/*
-    unsigned int i;
-    for (i = UART_BUFSIZE - 1; i >= 0; i--)
-    {
-        UART_Buf[i] = 0;
-    }*/
     UART_Available = 0;
+}
+
+void uartTransmit(char *data, unsigned char length) {
+    UART_TXBUF = data;
+    UART_BYTES_TX = length;
+    UART_TXDONE = 0;
+    UCA0TXBUF = *(UART_TXBUF++);
+    UART_BYTES_TX--;
 }
 // USCI A/B Transmit done interrupt vector
 #pragma vector = USCIAB0TX_VECTOR
@@ -130,9 +135,12 @@ __interrupt void USCIAB0TX_ISR(void)
 {
     if ((IFG2 & UCA0TXIFG) > 0) //UART Transmit buffer ready
     {
-        if (UART_BYTE_CNTR > 0)
+        if (UART_BYTES_TX > 0)
         {
-            UCA0TXBUF = UART_Buf[--UART_BYTE_CNTR];
+            UCA0TXBUF = *(UART_TXBUF++);
+            UART_BYTES_TX--;
+        } else {
+            UART_TXDONE = 1;
         }
         IFG2 &= ~UCA0TXIFG;
     }
