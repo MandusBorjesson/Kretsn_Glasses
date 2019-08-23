@@ -69,6 +69,14 @@ void USCI_B0_Init()
 
 }
 
+void uartTransmit(char *data, unsigned char length) {
+    UART_TXBUF = data;
+    UART_BYTES_TX = length;
+    UART_TXDONE = 0;
+    UCA0TXBUF = *(UART_TXBUF++);
+    UART_BYTES_TX--;
+}
+
 void handleUART()
 {
     unsigned int UART_CMD = UART_Buf[0] << 8 | UART_Buf[1];
@@ -78,7 +86,6 @@ void handleUART()
     {
     case UART_CMD_WRT_FLASH:
     {
-//        unsigned int base = (UART_Buf[2] << 8 | UART_Buf[3]);
         unsigned char length = UART_Buf[4];
         Flash_Write(base, &(UART_Buf[6]), length);
         if(base == DESC_MEM_BASE){
@@ -88,7 +95,6 @@ void handleUART()
     }
     case UART_CMD_CLR_FLASH:
     {
-//        unsigned int base = (UART_Buf[2] << 8 | UART_Buf[3]);
         Flash_Erase(base);
         if(base == DESC_MEM_BASE){
             n_descriptors = 0;
@@ -122,13 +128,6 @@ void clearUARTbuf()
     UART_Available = 0;
 }
 
-void uartTransmit(char *data, unsigned char length) {
-    UART_TXBUF = data;
-    UART_BYTES_TX = length;
-    UART_TXDONE = 0;
-    UCA0TXBUF = *(UART_TXBUF++);
-    UART_BYTES_TX--;
-}
 // USCI A/B Transmit done interrupt vector
 #pragma vector = USCIAB0TX_VECTOR
 __interrupt void USCIAB0TX_ISR(void)

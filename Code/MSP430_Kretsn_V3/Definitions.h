@@ -12,16 +12,18 @@
 #ifndef DEFINITIONS_H_
 #define DEFINITIONS_H_
 
-const char version_data[78] = {"\n_Kretsn Glasses\nHW Rev. 2.1 by Albin Lejaker\nSW Ver. 1.0 by Mandus Borjesson\n"};
+const char version_data[78] = {"\n_Kretsn Glasses\nHW Rev. 2.1 by Albin Lejaker\nSW Ver. 3.0 by Mandus Borjesson\n"};
 const char flash_regions[116] = {"\nAvailable regions:\n0x1000 - info D\n0x1040 - Configuration memory\n0x1080 - Descriptor Memory\n0xEE00 - Image memory\n"};
 
 
 struct imageDescriptor {
-   unsigned int offset;     // Address offset of an image/animation in flash
-   unsigned int size;       // Size of image
-   unsigned char period;    // Sensor dependency
-   unsigned char mode;      // Sensor dependency
-   unsigned char eyes;
+    unsigned int offset;     // Address offset of an image/animation in flash
+    unsigned int size;       // Size of image
+    unsigned char period;    // Frame period, in 100ms
+    unsigned char mode;      // Animation mode
+    unsigned char loops;     // Single shot animation
+    unsigned char eyes;      // Eye settings
+    unsigned char chain;     // Chaining descriptors
 };
 
 #define DESC_SIZE 8
@@ -45,15 +47,16 @@ unsigned char UART_Buf[UART_BUFSIZE];
 #define MODE_FRAME 1
 #define MODE_SWEEP_UP 2
 #define MODE_SWEEP_DN 3
+#define MODE_SINGLE (0x01 << 4)
 #define NUM_SENSORS 8           //Number of sensors
 
-int  FRAME_CNTR = 0;   // Current frame that is displayed
 unsigned int  FRAME_OFFS = 0;   // Current frame offset
 
 /* Status definitions for CPU wake-ups */
-#define STATUS_BTN_1 (1<<0) // Button press timeout
-#define STATUS_BTN_2 (1<<1) // Button pressed
+#define STATUS_BTN_1 (1<<0) // Button 1 pressed
+#define STATUS_BTN_2 (1<<1) // Button 2 pressed
 #define STATUS_UART  (1<<2) // UART handling requested
+#define STATUS_FRAME (1<<3) // Frame update requested
 
 unsigned int STATUS_VEC = 0;
 

@@ -22,9 +22,6 @@ void DCO_Calib()
       BCSCTL1 = CALBC1_1MHZ;                    // Set DCO to 1MHz
       DCOCTL = CALDCO_1MHZ;
       FCTL2 = FWKEY + FSSEL0 + FN1;             // MCLK/3 for Flash Timing Generator
-
-//    BCSCTL1 = CALBC1_1MHZ; // Set DCO to 1MHz
-//    DCOCTL = CALDCO_1MHZ;
 }
 
 #endif /* DCO_H_ */
