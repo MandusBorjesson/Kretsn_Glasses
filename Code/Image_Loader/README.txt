@@ -23,7 +23,9 @@ Arguments switches, use as many as you like:
 	- _M : Mode switch, "1" displays the image one "frame" (eight rows) at the time. "2" sweeps over the image
 	- _P: time period between frame updates, in milliseconds. Values between 0 and 25000 are permitted. 
 	- _L/R: Left/Right eye color setting, see table below.
-		
+	- _S[1-9]/R: Number of loops. Animations loop [1-9] times (or a random amount when using _SR) and then halt at last frame
+	- _C[N+]: Chain command. Use alongside _S switch. When animation finishes looping it jumps to animation N. Can use a single multiple N, i.e _C62, in this case the animation will jump to one of the two options (2 or 6, random) when finished. 
+
 Eye color settings:
  0: Eye off
  1: Red
