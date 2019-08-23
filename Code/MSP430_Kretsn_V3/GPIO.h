@@ -77,13 +77,6 @@ GPIO_BTN_Init()
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void)
 {
-    /*
-    P1IE &= ~INT_BTN; // P1.4 interrupt disabled
-    P1IFG &= ~INT_BTN; // P1.4 IFG cleared
-
-    TA1CCR2 += 30000;             // Wait a while before reading pin (debounce)
-    TA1CCTL2 = OUTMOD_4 | CCIE;         // TA1CCR1 interrupt enabled
-    */
 }
 
 #endif /* GPIO_H_ */

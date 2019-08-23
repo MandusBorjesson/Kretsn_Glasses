@@ -14,6 +14,23 @@
 
 #define FLASH_SEGMENT_SIZE 0x0200 // Smallest erasable partition of memory
 
+char inAllowedMem(unsigned int base, int length)
+{
+    if ((base >= IMG_MEM_BASE  ) && ((base + length) <= (IMG_MEM_BASE  + IMG_MEM_SIZE  )))
+        return 1;
+
+    if ((base >= DESC_MEM_BASE ) && ((base + length) <= (DESC_MEM_BASE + DESC_MEM_SIZE )))
+        return 1;
+
+    if ((base >= CFG_MEM_BASE ) && ((base + length) <= (CFG_MEM_BASE + CFG_MEM_SIZE )))
+        return 1;
+
+    if ((base >= INFOD_BASE ) && ((base + length) <= (INFOD_BASE + INFOD_SIZE )))
+        return 1;
+
+    return 0;
+}
+
 unsigned char Flash_Count_Descriptors(void)
 {
     char *p = (char*)DESC_MEM_BASE;                          // Flash pointer
@@ -65,8 +82,12 @@ char Flash_Load_Descriptor(struct imageDescriptor *descriptor,
     descriptor->offset = p[1]+(p[0] << 8);
     descriptor->size   = p[3]+(p[2] << 8);
     descriptor->period = p[4];
-    descriptor->mode   = p[5];
+    descriptor->mode   = p[5] & 0x0F; // Lower nibble
+    descriptor->loops  = (p[5] & 0xF0) >> 4; // Upper nibble
+    if(descriptor->loops == 14) // Random amount of loops
+        descriptor->loops = TA0R & 0x07; // Grab lowest nibble (values 0-7 decimal) from timer 0, as pseudo-rng
     descriptor->eyes   = p[6];
+    descriptor->chain  = p[7] & (0xFF>>(MAX_DESCRIPTORS-n_descriptors)); // Remove any chained descriptors that do not exist
 
     if (descriptor->eyes == 0xFF)
         return 0;
@@ -77,7 +98,6 @@ char Flash_Load_Descriptor(struct imageDescriptor *descriptor,
 void Flash_Erase_Images(void)
 {
     char *Flash_ptr = (char*)IMG_MEM_BASE;                          // Flash pointer
-//    Flash_ptr = (char *) IMG_MEM_BASE;        // Initialize Flash pointer
 
     FCTL1 = FWKEY + ERASE;                    // Set Erase bit
     FCTL3 = FWKEY;                            // Clear Lock bit
@@ -90,23 +110,6 @@ void Flash_Erase_Images(void)
     }
 
     FCTL3 = FWKEY + LOCK;                     // Set LOCK bit
-}
-
-char inAllowedMem(unsigned int base, int length)
-{
-    if ((base >= IMG_MEM_BASE  ) && ((base + length) <= (IMG_MEM_BASE  + IMG_MEM_SIZE  )))
-        return 1;
-
-    if ((base >= DESC_MEM_BASE ) && ((base + length) <= (DESC_MEM_BASE + DESC_MEM_SIZE )))
-        return 1;
-
-    if ((base >= CFG_MEM_BASE ) && ((base + length) <= (CFG_MEM_BASE + CFG_MEM_SIZE )))
-        return 1;
-
-    if ((base >= INFOD_BASE ) && ((base + length) <= (INFOD_BASE + INFOD_SIZE )))
-        return 1;
-
-    return 0;
 }
 
 void Flash_Write(unsigned int startAddr, unsigned char data[], int dataSize)

@@ -38,31 +38,8 @@ __interrupt void T1A0_ISR(void)
     {
         counter = 0;
 
-        switch (img.mode)
-        {
-        case MODE_FRAME:
-            FRAME_CNTR += 16;
-            if (FRAME_CNTR + 16 > img.size)
-                FRAME_CNTR = 0;
-            break;
-        case MODE_SWEEP_UP:
-            FRAME_CNTR += 2;
-            if (FRAME_CNTR + 16 > img.size)
-                FRAME_CNTR = 0;
-            break;
-        case MODE_SWEEP_DN:
-            FRAME_CNTR -= 2;
-            if (FRAME_CNTR < 0)
-                FRAME_CNTR = img.size-16;
-            break;
-        default:
-            FRAME_CNTR = 0;
-            break;
-        }
-
-
-        FRAME_OFFS = FRAME_CNTR + IMG_MEM_BASE + img.offset; // Calculate flash index of first element in current frame
-
+        STATUS_VEC |= STATUS_FRAME;  // Set Frame update status
+        __bic_SR_register_on_exit(CPUOFF);       // Wake up main CPU
     }
     /* Start ADC sampling for the button */
     ADC10CTL0 |= ENC + ADC10SC;

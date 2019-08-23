@@ -41,6 +41,7 @@
 #include <msp430g2553.h>
 #include <string.h>
 #include "Definitions.h"
+#include "frameUpdate.h"
 
 #include "FLASH.h"
 #include "ADC10.h"
@@ -88,16 +89,27 @@ int main(void)
     }
     FRAME_OFFS = IMG_MEM_BASE + img.offset; // Calculate flash index of first element in current frame
     Eyes_Set(img.eyes);
+    img_start(img);
 
     while (1)
     {
+        if ((STATUS_VEC & STATUS_FRAME) > 0){
+            if(img_isRunning() == 0x01){
+                img_update(img);
+            } else if(img.chain != 0x00){ // Are there any chained animations?
+                Flash_Load_Descriptor(&img, img_find_chained(img.chain));
+                Eyes_Set(img.eyes);
+                FRAME_OFFS = IMG_MEM_BASE + img.offset + ((img.mode==MODE_SWEEP_DN)?(img.size - 16):0);
+                img_start(img);
+            }
+        }
         if ((STATUS_VEC & STATUS_BTN_1) > 0)
         {
             Status_Set(STATUS_LED_OFF);
             Flash_Load_Descriptor(&img, btnIndex);
             Eyes_Set(img.eyes);
-            FRAME_CNTR = 0;
-            FRAME_OFFS = IMG_MEM_BASE + img.offset;
+            FRAME_OFFS = IMG_MEM_BASE + img.offset + ((img.mode==MODE_SWEEP_DN)?(img.size - 16):0);
+            img_start(img);
             btnIndex = 0;
         }
 
