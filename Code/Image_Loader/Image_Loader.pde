@@ -18,14 +18,16 @@ String modes[] = {"FRAME", "SWEEP UP", "SWEEP DOWN"};
 
 public class Setting {
  public String name, type;
- public int period, offset, size, mode, eyes;
+ public int period, offset, size, mode, eyes, loops, chain;
 
  Setting(String name) {
    this.name = name;
    //this.type = "FRAME";
    this.mode = 1;
-   this.period = 1000;
+   this.period = 100;
    this.eyes = 0;
+   this.loops = 15;
+   this.chain = 0;
  }
 
  void display() {
@@ -142,6 +144,25 @@ void folderSelected(File selection) {
          m = match(file, "_R([0-7])"); // Look for Right eye switch
          if(m != null) setting.eyes += Integer.parseInt(m[1]);
 
+         m = match(file, "_S([0-9])"); // Look for Loop N switch
+         if(m != null){
+           setting.loops = int(m[1])-1;
+           if(setting.loops == -1)
+             setting.loops = 0;
+         }
+
+         m = match(file, "_SR"); // Look for Loop Random switch
+         if(m != null) setting.loops = 14;
+
+         m = match(file, "_C([0-7]+)"); // Look for Chain switch
+         if(m != null) {
+           for(int bit=0; bit < 8; bit++){
+             if(m[1].contains(str(bit)))
+               setting.chain |= (1<<bit);
+               //println(bit);
+           }
+         }
+
          // Add setting to array 
          settings[settingcounter++] = setting;
        }
@@ -249,9 +270,9 @@ void writeToGlasses(byte[] data) {
    desc[2] = (byte)(s.size>>8);
    desc[3] = (byte)(s.size&0xFF);
    desc[4] = (byte)(floor(s.period/100)&0xFF); 
-   desc[5] = (byte)(s.mode&0xFF);
+   desc[5] = (byte)((s.loops<<4) | (s.mode&0x0F));
    desc[6] = (byte)(s.eyes);
-   desc[7] = 0;
+   desc[7] = (byte)(s.chain);
    arrayCopy(desc, 0, chunked, i*desc.length, desc.length);
  }
 
@@ -269,7 +290,7 @@ void writeToGlasses(byte[] data) {
  println("                / Period");
  println("/ Offset        |   / Mode");
  println("|       / Size  |   |   / Eyes  ");
- println("|_____  |_____  |_  |_  |_");
+ println("|_____  |_____  |_  |_  |_  __/ Chain animations ");
  for(int i = 0; i < chunked.length; i++){
    print(hex(chunked[i]) + ", ");
    if((i+1)%8 == 0)
