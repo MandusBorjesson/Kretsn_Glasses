@@ -11,6 +11,7 @@
 
 #ifndef FRAMEUPDATE_H_
 #define FRAMEUPDATE_H_
+#include "GPIO.h"
 
 char img_halt = 0;
 char img_loop = 0;
@@ -21,6 +22,9 @@ char img_isRunning(){
 }
 
 void img_start(struct imageDescriptor image){
+    FRAME_OFFS = IMG_MEM_BASE + image.offset + ((image.mode==MODE_SWEEP_DN)?(image.size-16):0); // Calculate flash index of first element in current frame
+    Eyes_Set(image.eyes);
+
     img_halt = 0;
     img_loop = image.loops;
     FRAME_CNTR = 0;
@@ -68,16 +72,11 @@ unsigned char img_find_chained(unsigned char chain){
         if( (chain&(0x01<<i)) != 0x00)
             n_ones++;
     }
-    if(n_ones == 0) return 0; // Should never happen, but will cause inf loop if not handled
 
-    unsigned char rand_index = TA0R & 0x07; // Grab lowest byte (values 0-7 decimal) from timer 0, as pseudo-rng
+    // Choose which animation to jump to
+    unsigned char rand_index = random(n_ones);
 
-    // Reduce rand_index until it is in range ]n_ones 0]
-    while(rand_index >= n_ones)
-        rand_index -= n_ones;
-
-    rand_index++;
-
+    // Find index of chose animation
     for(i=0; i<sizeof(chain)*8; i++){
         if((chain&(0x01<<i)) != 0x00)
             rand_index--;

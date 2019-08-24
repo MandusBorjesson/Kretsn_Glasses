@@ -34,11 +34,11 @@ void ADC10_Init()
 #pragma vector=ADC10_VECTOR
 __interrupt void ADC10_ISR(void)
 {
-
+    const char threshold = 15;
     static unsigned char prevSample;
     unsigned char currSample = ADC10MEM >> 2;
 
-    if ((abs(currSample - prevSample) < BUTTON_TOLERANCE) && currSample > 15 && buttonreleased == 1)
+    if ((abs(currSample - prevSample) < BUTTON_TOLERANCE) && currSample > threshold && buttonreleased == 1)
     {
         volatile unsigned int BTN_VAL = (currSample + prevSample) >> 1; // Set button value
 
@@ -50,7 +50,7 @@ __interrupt void ADC10_ISR(void)
         __bic_SR_register_on_exit(CPUOFF);       // Wake up main CPU
     }
 
-    if(currSample <= 15){
+    if(currSample <= threshold){
         buttonreleased = 1;
     }
 

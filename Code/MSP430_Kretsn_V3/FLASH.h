@@ -85,7 +85,7 @@ char Flash_Load_Descriptor(struct imageDescriptor *descriptor,
     descriptor->mode   = p[5] & 0x0F; // Lower nibble
     descriptor->loops  = (p[5] & 0xF0) >> 4; // Upper nibble
     if(descriptor->loops == 14) // Random amount of loops
-        descriptor->loops = TA0R & 0x07; // Grab lowest nibble (values 0-7 decimal) from timer 0, as pseudo-rng
+        descriptor->loops = random(7);
     descriptor->eyes   = p[6];
     descriptor->chain  = p[7] & (0xFF>>(MAX_DESCRIPTORS-n_descriptors)); // Remove any chained descriptors that do not exist
 

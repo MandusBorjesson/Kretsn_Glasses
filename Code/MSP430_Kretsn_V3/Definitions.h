@@ -106,5 +106,28 @@ unsigned char n_descriptors = 0;
 #define ROWSEL_2 BIT6
 #define ROWSEL_3 BIT7
 
+int64_t seed = 0;
+
+int64_t randomLong() {
+  seed ^= (seed << 21);
+  seed ^= (seed >> 35);
+  seed ^= (seed << 4);
+  return seed;
+}
+
+// Generate a random number [max 1]
+unsigned char random(char max){
+    unsigned char rand = (unsigned char)(randomLong()) & ((max>0x0F)?0xFF:0x0F);
+
+    if(max == 0) return 0; // Will cause infinite loop if not handled
+
+    // Reduce rand_index until it is in range ]max 0]
+    while(rand >= max){
+        rand -= max;
+    }
+
+    return ++rand;
+
+}
 
 #endif /* DEFINITIONS_H_ */
